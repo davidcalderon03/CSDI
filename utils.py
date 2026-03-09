@@ -1,7 +1,9 @@
 import numpy as np
 import torch
+import math
 from torch.optim import Adam
 from tqdm import tqdm
+from transformers import AutoTokenizer 
 import pickle
 
 
@@ -69,7 +71,7 @@ def train(
                     "at",
                     epoch_no,
                 )
-
+    print('Saving model!')
     if foldername != "":
         torch.save(model.state_dict(), output_path)
 
@@ -78,6 +80,19 @@ def quantile_loss(target, forecast, q: float, eval_points) -> float:
     return 2 * torch.sum(
         torch.abs((forecast - target) * eval_points * ((target <= forecast) * 1.0 - q))
     )
+
+def calculate_mcc(target, forecast):
+    actual_delta = target[:, :, 1:] - target[:, :, :-1]
+    pred_delta = forecast[:, :, 1:] - forecast[:, :, :-1]
+    actual_sign = torch.sign(actual_delta).int()
+    pred_sign = torch.sign(pred_delta).int()
+    tp = ((actual_sign == 1) & (pred_sign == 1)).sum().item()
+    tn = ((actual_sign == -1) & (pred_sign == -1)).sum().item()
+    fp = ((actual_sign == -1) & (pred_sign == 1)).sum().item()
+    fn = ((actual_sign == 1) & (pred_sign == -1)).sum().item()
+    return ((tp * tn) - (fp * fn)) / (math.sqrt(
+        (tp + fp) * (tp + fn) * (tn + fp) * (tn + fn)
+    ))
 
 
 def calc_denominator(target, eval_points):
@@ -118,7 +133,6 @@ def calc_quantile_CRPS_sum(target, forecast, eval_points, mean_scaler, scaler):
     return CRPS.item() / len(quantiles)
 
 def evaluate(model, test_loader, nsample=100, scaler=1, mean_scaler=0, foldername=""):
-
     with torch.no_grad():
         model.eval()
         mse_total = 0
@@ -132,9 +146,12 @@ def evaluate(model, test_loader, nsample=100, scaler=1, mean_scaler=0, foldernam
         all_generated_samples = []
         with tqdm(test_loader, mininterval=5.0, maxinterval=50.0) as it:
             for batch_no, test_batch in enumerate(it, start=1):
+                # This line takes a very long time
                 output = model.evaluate(test_batch, nsample)
 
                 samples, c_target, eval_points, observed_points, observed_time = output
+                print('Sample NAN COUNT')
+                print(torch.sum(torch.isnan(samples)))
                 samples = samples.permute(0, 1, 3, 2)  # (B,nsample,L,K)
                 c_target = c_target.permute(0, 2, 1)  # (B,L,K)
                 eval_points = eval_points.permute(0, 2, 1)
@@ -157,7 +174,6 @@ def evaluate(model, test_loader, nsample=100, scaler=1, mean_scaler=0, foldernam
                 mse_total += mse_current.sum().item()
                 mae_total += mae_current.sum().item()
                 evalpoints_total += eval_points.sum().item()
-
                 it.set_postfix(
                     ordered_dict={
                         "rmse_total": np.sqrt(mse_total / evalpoints_total),
@@ -195,6 +211,10 @@ def evaluate(model, test_loader, nsample=100, scaler=1, mean_scaler=0, foldernam
             CRPS_sum = calc_quantile_CRPS_sum(
                 all_target, all_generated_samples, all_evalpoint, mean_scaler, scaler
             )
+            print("IMPORTANT SHAPES")
+            print(all_target.shape)
+            print(all_generated_samples.shape)
+            MCC = calculate_mcc(all_target, all_generated_samples[:, -1, :, :])
 
             with open(
                 foldername + "/result_nsample" + str(nsample) + ".pk", "wb"
@@ -211,3 +231,4 @@ def evaluate(model, test_loader, nsample=100, scaler=1, mean_scaler=0, foldernam
                 print("MAE:", mae_total / evalpoints_total)
                 print("CRPS:", CRPS)
                 print("CRPS_sum:", CRPS_sum)
+                print("MCC: ", MCC)

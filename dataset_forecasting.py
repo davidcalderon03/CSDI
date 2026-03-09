@@ -13,18 +13,38 @@ class Forecasting_Dataset(Dataset):
             datafolder = './data/electricity_nips'
             self.test_length= 24*7
             self.valid_length = 24*5
-            
+
+        if datatype == 'financial':
+            datafolder = './data/financial'
+            self.test_length= 24*7
+            self.valid_length = 24*5
+
         self.seq_length = self.history_length + self.pred_length
-            
+
         paths=datafolder+'/data.pkl' 
         #shape: (T x N)
         #mask_data is usually filled by 1
+        np.set_printoptions(precision=3, suppress=True, threshold=10000)
         with open(paths, 'rb') as f:
             self.main_data, self.mask_data = pickle.load(f)
+            # print(self.main_data.shape)
+            # print(self.mask_data.shape)
+            # self.main_data = self.main_data[:, :10]
+            # self.mask_data = self.mask_data[:, :10]
+            # print(self.main_data.shape)
+            # print(self.mask_data.shape)
+            # exit()
         paths=datafolder+'/meanstd.pkl'
         with open(paths, 'rb') as f:
             self.mean_data, self.std_data = pickle.load(f)
-            
+            # self.mean_data = self.mean_data[:10]
+            # self.std_data = self.std_data[:10]
+            # print(self.mean_data.shape)
+            # print(self.std_data.shape)
+
+        # print('mean_data', self.mean_data)
+        # print('std_data', self.std_data.shape)
+        # print('main_data', self.main_data.shape)
         self.main_data = (self.main_data - self.mean_data) / self.std_data
 
 
@@ -41,7 +61,7 @@ class Forecasting_Dataset(Dataset):
             start = total_length - self.seq_length - self.test_length + self.pred_length
             end = total_length - self.seq_length + self.pred_length
             self.use_index = np.arange(start,end,self.pred_length)
-        
+
     def __getitem__(self, orgindex):
         index = self.use_index[orgindex]
         target_mask = self.mask_data[index:index+self.seq_length].copy()

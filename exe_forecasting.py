@@ -28,6 +28,9 @@ with open(path, "r") as f:
 if args.datatype == 'electricity':
     target_dim = 370
 
+if args.datatype == 'financial':
+    target_dim = 1000
+
 config["model"]["is_unconditional"] = args.unconditional
 
 print(json.dumps(config, indent=4))
