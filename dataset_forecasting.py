@@ -27,13 +27,24 @@ class Forecasting_Dataset(Dataset):
         np.set_printoptions(precision=3, suppress=True, threshold=10000)
         with open(paths, 'rb') as f:
             self.main_data, self.mask_data = pickle.load(f)
+            # print(self.main_data.shape)
+            # print(self.mask_data.shape)
+            # self.main_data = self.main_data[:, :10]
+            # self.mask_data = self.mask_data[:, :10]
+            # print(self.main_data.shape)
+            # print(self.mask_data.shape)
+            # exit()
         paths=datafolder+'/meanstd.pkl'
         with open(paths, 'rb') as f:
             self.mean_data, self.std_data = pickle.load(f)
+            # self.mean_data = self.mean_data[:10]
+            # self.std_data = self.std_data[:10]
+            # print(self.mean_data.shape)
+            # print(self.std_data.shape)
 
-        print('mean_data', self.mean_data)
-        print('std_data', self.std_data.shape)
-        print('main_data', self.main_data.shape)
+        # print('mean_data', self.mean_data)
+        # print('std_data', self.std_data.shape)
+        # print('main_data', self.main_data.shape)
         self.main_data = (self.main_data - self.mean_data) / self.std_data
 
 

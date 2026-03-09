@@ -126,6 +126,14 @@ class CSDI_base(nn.Module):
         noisy_data = (current_alpha ** 0.5) * observed_data + (1.0 - current_alpha) ** 0.5 * noise
 
         total_input = self.set_input_to_diffmodel(noisy_data, observed_data, cond_mask)
+        # THIS IS EXTREMELY IMPORTANT
+        # print("Before: ")
+        # print(total_input.numel())
+        # print(torch.sum(torch.isnan(total_input)))
+        total_input[torch.isnan(total_input)] = torch.nanmean(total_input)
+        # print("After: ")
+        # print(total_input.numel())
+        # print(torch.sum(torch.isnan(total_input)))
 
         predicted = self.diffmodel(total_input, side_info, t)  # (B,K,L)
 
@@ -151,6 +159,10 @@ class CSDI_base(nn.Module):
         imputed_samples = torch.zeros(B, n_samples, K, L).to(self.device)
 
         for i in range(n_samples):
+            print(f"Sample: {i}")
+            print("Number of nan values: ")
+            print(torch.sum(torch.isnan(imputed_samples)))
+            
             # generate noisy observation for unconditional model
             if self.is_unconditional == True:
                 noisy_obs = observed_data
@@ -171,6 +183,9 @@ class CSDI_base(nn.Module):
                     noisy_target = ((1 - cond_mask) * current_sample).unsqueeze(1)
                     diff_input = torch.cat([cond_obs, noisy_target], dim=1)  # (B,2,K,L)
                 predicted = self.diffmodel(diff_input, side_info, torch.tensor([t]).to(self.device))
+                # print("Issue with predicted")
+                # print(predicted.numel())
+                # print(torch.sum(torch.isnan(predicted)))
 
                 coeff1 = 1 / self.alpha_hat[t] ** 0.5
                 coeff2 = (1 - self.alpha_hat[t]) / (1 - self.alpha[t]) ** 0.5
@@ -181,7 +196,12 @@ class CSDI_base(nn.Module):
                     sigma = (
                         (1.0 - self.alpha[t - 1]) / (1.0 - self.alpha[t]) * self.beta[t]
                     ) ** 0.5
+                    # print("Denominator: ")
+                    # print((1.0 - self.alpha[t]) * self.beta[t])
                     current_sample += sigma * noise
+                #     print("sigma noise: ")
+                #     print(sigma * noise)
+                # exit()
 
             imputed_samples[:, i] = current_sample.detach()
         return imputed_samples
@@ -405,13 +425,14 @@ class CSDI_Forecasting(CSDI_base):
             _,
             feature_id, 
         ) = self.process_data(batch)
+        observed_data[torch.isnan(observed_data)] = torch.nanmean(observed_data)
 
         with torch.no_grad():
             cond_mask = gt_mask
             target_mask = observed_mask * (1-gt_mask)
-
             side_info = self.get_side_info(observed_tp, cond_mask)
-
+            side_info[torch.isnan(side_info)] = torch.nanmean(side_info)
+            # This is the part that takes a super long time
             samples = self.impute(observed_data, cond_mask, side_info, n_samples)
-
+            samples[torch.isnan(samples)] = torch.nanmean(samples)
         return samples, observed_data, target_mask, observed_mask, observed_tp
