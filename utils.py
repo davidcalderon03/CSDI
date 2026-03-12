@@ -81,19 +81,29 @@ def quantile_loss(target, forecast, q: float, eval_points) -> float:
         torch.abs((forecast - target) * eval_points * ((target <= forecast) * 1.0 - q))
     )
 
-def calculate_mcc(target, forecast):
-    actual_delta = target[:, :, 1:] - target[:, :, :-1]
-    pred_delta = forecast[:, :, 1:] - forecast[:, :, :-1]
-    actual_sign = torch.sign(actual_delta).int()
-    pred_sign = torch.sign(pred_delta).int()
-    tp = ((actual_sign == 1) & (pred_sign == 1)).sum().item()
-    tn = ((actual_sign == -1) & (pred_sign == -1)).sum().item()
-    fp = ((actual_sign == -1) & (pred_sign == 1)).sum().item()
-    fn = ((actual_sign == 1) & (pred_sign == -1)).sum().item()
-    return ((tp * tn) - (fp * fn)) / (math.sqrt(
-        (tp + fp) * (tp + fn) * (tn + fp) * (tn + fn)
-    ))
 
+def calculate_mcc(target, forecast):
+    # Calculate deltas
+    print(target.shape)
+    print(forecast.values.shape)
+    forecast = forecast.values
+    actual_delta = target[:, 1:, :] - target[:, :-1, :]
+    pred_delta = forecast[:, 1:, :] - forecast[:, :-1, :]
+    
+    # Convert to binary: 1 for increase, 0 for decrease/no change
+    # Or handle 0s explicitly if they are frequent in your data
+    actual_sign = (actual_delta > 0).float()
+    pred_sign = (pred_delta > 0).float()
+    
+    tp = (actual_sign * pred_sign).sum()
+    tn = ((1 - actual_sign) * (1 - pred_sign)).sum()
+    fp = ((1 - actual_sign) * pred_sign).sum()
+    fn = (actual_sign * (1 - pred_sign)).sum()
+    
+    numerator = (tp * tn) - (fp * fn)
+    denominator = torch.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn))
+    
+    return (numerator / (denominator + 1e-10)).item()
 
 def calc_denominator(target, eval_points):
     return torch.sum(torch.abs(target * eval_points))
@@ -214,7 +224,7 @@ def evaluate(model, test_loader, nsample=100, scaler=1, mean_scaler=0, foldernam
             print("IMPORTANT SHAPES")
             print(all_target.shape)
             print(all_generated_samples.shape)
-            MCC = calculate_mcc(all_target, all_generated_samples[:, -1, :, :])
+            MCC = calculate_mcc(all_target, samples_median)
 
             with open(
                 foldername + "/result_nsample" + str(nsample) + ".pk", "wb"
