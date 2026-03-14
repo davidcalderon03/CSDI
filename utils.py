@@ -105,6 +105,29 @@ def calculate_mcc(target, forecast):
     
     return (numerator / (denominator + 1e-10)).item()
 
+def calculate_accuracy(target, forecast):
+    # Calculate deltas
+    print(target.shape)
+    print(forecast.values.shape)
+    forecast = forecast.values
+    actual_delta = target[:, 1:, :] - target[:, :-1, :]
+    pred_delta = forecast[:, 1:, :] - forecast[:, :-1, :]
+    
+    # Convert to binary: 1 for increase, 0 for decrease/no change
+    # Or handle 0s explicitly if they are frequent in your data
+    actual_sign = (actual_delta > 0).float()
+    pred_sign = (pred_delta > 0).float()
+    
+    tp = (actual_sign * pred_sign).sum()
+    tn = ((1 - actual_sign) * (1 - pred_sign)).sum()
+    fp = ((1 - actual_sign) * pred_sign).sum()
+    fn = (actual_sign * (1 - pred_sign)).sum()
+    
+    numerator = (tp + tn)
+    denominator = (tp + tn + fp + fn)
+    
+    return (numerator / (denominator + 1e-10)).item()
+
 def calc_denominator(target, eval_points):
     return torch.sum(torch.abs(target * eval_points))
 
@@ -225,6 +248,7 @@ def evaluate(model, test_loader, nsample=100, scaler=1, mean_scaler=0, foldernam
             print(all_target.shape)
             print(all_generated_samples.shape)
             MCC = calculate_mcc(all_target, samples_median)
+            ACCURACY = calculate_accuracy(all_target, samples_median)
 
             with open(
                 foldername + "/result_nsample" + str(nsample) + ".pk", "wb"
@@ -242,3 +266,4 @@ def evaluate(model, test_loader, nsample=100, scaler=1, mean_scaler=0, foldernam
                 print("CRPS:", CRPS)
                 print("CRPS_sum:", CRPS_sum)
                 print("MCC: ", MCC)
+                print("ACCURACY: ", ACCURACY)

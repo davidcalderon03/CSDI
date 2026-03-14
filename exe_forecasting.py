@@ -29,7 +29,7 @@ if args.datatype == 'electricity':
     target_dim = 370
 
 if args.datatype == 'financial':
-    target_dim = 1000
+    target_dim = 500
 
 config["model"]["is_unconditional"] = args.unconditional
 
